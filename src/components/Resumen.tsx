@@ -2,6 +2,27 @@ import { useState, useEffect } from 'react';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
+const getWeekDates = () => {
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dayOfWeek = today.getDay();
+  const diffToMonday = today.getDate() - dayOfWeek + (dayOfWeek === 0 ? -6 : 1);
+  const monday = new Date(today.setDate(diffToMonday));
+  
+  const days = ['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'];
+  return days.map((day, index) => {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + index);
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const date = String(d.getDate()).padStart(2, '0');
+    return {
+      name: day,
+      value: `${year}-${month}-${date}`
+    };
+  });
+};
+
 export default function Resumen() {
   const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
   const [summary, setSummary] = useState({
@@ -14,7 +35,7 @@ export default function Resumen() {
 
   useEffect(() => {
     const qSales = query(collection(db, 'sales'), where('date', '==', date));
-    const qCredits = query(collection(db, 'credits'), where('date', '==', date));
+    const qCredits = query(collection(db, 'credits')); // Mostrar todos los créditos históricos
     const qExpenses = query(collection(db, 'expenses'), where('date', '==', date));
 
     let salesTotal = 0;
@@ -69,23 +90,41 @@ export default function Resumen() {
   }, [date]);
 
   const realProfit = summary.sales - (summary.expenses + summary.materials);
+  const weekDays = getWeekDates();
 
   return (
     <div className="space-y-6">
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-primary/10 flex items-center justify-between">
-        <label className="font-bold text-primary">Fecha:</label>
-        <input 
-          type="date" 
-          value={date}
-          onChange={e => setDate(e.target.value)}
-          className="p-2 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent font-medium"
-        />
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-primary/10 space-y-4">
+        <div className="flex justify-between gap-1 overflow-x-auto pb-2">
+          {weekDays.map(day => (
+            <button
+              key={day.value}
+              onClick={() => setDate(day.value)}
+              className={`flex-1 min-w-[40px] py-2 rounded-xl text-sm font-bold transition-colors ${
+                date === day.value 
+                  ? 'bg-primary text-white shadow-md' 
+                  : 'bg-primary/5 text-primary/70 hover:bg-primary/10'
+              }`}
+            >
+              {day.name}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center justify-between border-t border-primary/10 pt-4">
+          <label className="font-bold text-primary">Fecha específica:</label>
+          <input 
+            type="date" 
+            value={date}
+            onChange={e => setDate(e.target.value)}
+            className="p-2 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent font-medium"
+          />
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
         <SummaryBox title="Ventas" amount={summary.sales} color="bg-green-100 text-green-800" />
         <SummaryBox title="Créditos" amount={summary.credits} color="bg-blue-100 text-blue-800" />
-        <SummaryBox title="Gastos Grales" amount={summary.expenses} color="bg-orange-100 text-orange-800" />
+        <SummaryBox title="Gastos Generales" amount={summary.expenses} color="bg-orange-100 text-orange-800" />
         <SummaryBox title="Materiales" amount={summary.materials} color="bg-red-100 text-red-800" />
       </div>
 

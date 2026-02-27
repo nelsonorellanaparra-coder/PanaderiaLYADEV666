@@ -11,12 +11,17 @@ import Gastos from './components/Gastos';
 import Resumen from './components/Resumen';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('ventas');
+  const [activeTab, setActiveTab] = useState('resumen');
 
   return (
     <div className="flex flex-col h-screen bg-background text-primary font-sans">
-      <header className="bg-primary text-white p-4 shadow-md flex items-center justify-center">
-        <h1 className="text-xl font-bold tracking-wider">PANADERÍA LyA</h1>
+      <header className="bg-[#FDF8F0] shadow-md w-full flex justify-center">
+        <img 
+          src="https://drive.google.com/thumbnail?id=1wqisPyxDwFjxaAjy37GLDsMhIAwtm1cx&sz=w1200" 
+          alt="Banner Panadería LyA" 
+          className="w-full max-w-3xl h-auto object-contain"
+          referrerPolicy="no-referrer"
+        />
       </header>
       
       <main className="flex-1 overflow-y-auto p-4 pb-24">

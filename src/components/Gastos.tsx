@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { CATEGORIES, PAYERS } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
+import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 
 export default function Gastos() {
   const [description, setDescription] = useState('');
@@ -12,33 +13,49 @@ export default function Gastos() {
   const [payer, setPayer] = useState(PAYERS[0]);
   const [records, setRecords] = useState<any[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setRecords(docs);
     });
     return () => unsubscribe();
   }, []);
 
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayRecords = records.filter(r => r.date === todayStr);
+  const historyRecords = records.filter(r => r.date !== todayStr);
+
   const handleSave = async () => {
     if (!description.trim() || !amount) return alert('Complete todos los campos');
+    if (isSubmitting) return;
     
-    await addDoc(collection(db, 'expenses'), {
-      description,
-      amount: parseFloat(amount),
-      category,
-      payer: category === 'Material' ? payer : null,
-      date: new Date().toISOString().split('T')[0],
-      createdAt: Date.now()
-    });
-    setShowSuccess(true);
-    setDescription('');
-    setAmount('');
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'expenses'), {
+        description,
+        amount: parseFloat(amount),
+        category,
+        payer: category === 'Material' ? payer : null,
+        date: new Date().toISOString().split('T')[0],
+        createdAt: Date.now()
+      });
+      setShowSuccess(true);
+      setDescription('');
+      setAmount('');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteDoc(doc(db, 'expenses', id));
+  const confirmDelete = async () => {
+    if (deleteId) {
+      await deleteDoc(doc(db, 'expenses', deleteId));
+      setDeleteId(null);
+    }
   };
 
   return (
@@ -101,17 +118,18 @@ export default function Gastos() {
 
           <button 
             onClick={handleSave}
-            className="w-full bg-primary text-white p-4 rounded-xl font-bold hover:bg-primary/90 transition-colors mt-2"
+            disabled={isSubmitting || showSuccess}
+            className="w-full bg-primary text-white p-4 rounded-xl font-bold hover:bg-primary/90 transition-colors mt-2 disabled:opacity-50"
           >
-            Guardar Gasto
+            {isSubmitting ? 'Guardando...' : 'Guardar Gasto'}
           </button>
         </div>
       </div>
 
       <div>
-        <h3 className="font-bold mb-3 text-primary">Registro de Gastos</h3>
+        <h3 className="font-bold mb-3 text-primary">Gastos de Hoy</h3>
         <div className="space-y-3">
-          {records.map(record => (
+          {todayRecords.map(record => (
             <div key={record.id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-primary/10">
               <div>
                 <p className="font-bold">{record.description}</p>
@@ -128,17 +146,48 @@ export default function Gastos() {
               </div>
               <div className="flex items-center gap-4">
                 <span className="font-bold text-red-600">-Bs {record.amount}</span>
-                <button onClick={() => handleDelete(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
+                <button onClick={() => setDeleteId(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
                   <Trash2 size={20} />
                 </button>
               </div>
             </div>
           ))}
-          {records.length === 0 && <p className="text-center text-primary/50 py-4">No hay gastos registrados</p>}
+          {todayRecords.length === 0 && <p className="text-center text-primary/50 py-4">No hay gastos hoy</p>}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="font-bold mb-3 text-primary mt-6">Historial Anterior</h3>
+        <div className="space-y-3">
+          {historyRecords.map(record => (
+            <div key={record.id} className="bg-white p-4 rounded-xl shadow-sm flex justify-between items-center border border-primary/10 opacity-75">
+              <div>
+                <p className="font-bold">{record.description} <span className="text-xs font-normal text-primary/60 ml-1">({record.date})</span></p>
+                <div className="flex gap-2 mt-1">
+                  <span className="px-2 py-0.5 bg-primary/10 text-primary text-[10px] font-bold rounded-full uppercase">
+                    {record.category}
+                  </span>
+                  {record.payer && (
+                    <span className="px-2 py-0.5 bg-accent/20 text-accent text-[10px] font-bold rounded-full uppercase">
+                      Pagó: {record.payer}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <span className="font-bold text-red-600">-Bs {record.amount}</span>
+                <button onClick={() => setDeleteId(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
+                  <Trash2 size={20} />
+                </button>
+              </div>
+            </div>
+          ))}
+          {historyRecords.length === 0 && <p className="text-center text-primary/50 py-4">No hay historial reciente</p>}
         </div>
       </div>
 
       <SuccessDialog isOpen={showSuccess} onClose={() => setShowSuccess(false)} />
+      <PinDialog isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={confirmDelete} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { PRODUCTS } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
+import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
@@ -11,6 +12,8 @@ export default function Creditos() {
   const [quantity, setQuantity] = useState(1);
   const [records, setRecords] = useState<any[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const selectedProduct = PRODUCTS.find(p => p.name === product);
   const total = (selectedProduct?.price || 0) * quantity;
@@ -25,23 +28,32 @@ export default function Creditos() {
 
   const handleSave = async () => {
     if (!client.trim()) return alert('Ingrese el nombre del cliente');
+    if (isSubmitting) return;
     
-    await addDoc(collection(db, 'credits'), {
-      client,
-      product,
-      quantity,
-      total,
-      status: 'Pendiente',
-      date: new Date().toISOString().split('T')[0],
-      createdAt: Date.now()
-    });
-    setShowSuccess(true);
-    setClient('');
-    setQuantity(1);
+    setIsSubmitting(true);
+    try {
+      await addDoc(collection(db, 'credits'), {
+        client,
+        product,
+        quantity,
+        total,
+        status: 'Pendiente',
+        date: new Date().toISOString().split('T')[0],
+        createdAt: Date.now()
+      });
+      setShowSuccess(true);
+      setClient('');
+      setQuantity(1);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  const handleDelete = async (id: string) => {
-    await deleteDoc(doc(db, 'credits', id));
+  const confirmDelete = async () => {
+    if (deleteId) {
+      await deleteDoc(doc(db, 'credits', deleteId));
+      setDeleteId(null);
+    }
   };
 
   return (
@@ -83,6 +95,17 @@ export default function Creditos() {
               onChange={e => setQuantity(parseInt(e.target.value) || 1)}
               className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
             />
+            <div className="flex flex-wrap gap-2 mt-3">
+              {[5, 10, 15, 20, 25, 18, 90].map(q => (
+                <button
+                  key={q}
+                  onClick={() => setQuantity(q)}
+                  className="px-3 py-1.5 bg-primary/10 text-primary rounded-lg font-bold hover:bg-primary/20 transition-colors text-sm"
+                >
+                  {q}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="p-4 bg-accent/10 rounded-xl flex justify-between items-center">
@@ -92,9 +115,10 @@ export default function Creditos() {
 
           <button 
             onClick={handleSave}
-            className="w-full bg-primary text-white p-4 rounded-xl font-bold hover:bg-primary/90 transition-colors"
+            disabled={isSubmitting || showSuccess}
+            className="w-full bg-primary text-white p-4 rounded-xl font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
           >
-            Guardar Crédito
+            {isSubmitting ? 'Guardando...' : 'Guardar Crédito'}
           </button>
         </div>
       </div>
@@ -113,7 +137,7 @@ export default function Creditos() {
               </div>
               <div className="flex items-center gap-4">
                 <span className="font-bold text-accent">Bs {record.total}</span>
-                <button onClick={() => handleDelete(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
+                <button onClick={() => setDeleteId(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
                   <Trash2 size={20} />
                 </button>
               </div>
@@ -124,6 +148,7 @@ export default function Creditos() {
       </div>
 
       <SuccessDialog isOpen={showSuccess} onClose={() => setShowSuccess(false)} />
+      <PinDialog isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={confirmDelete} />
     </div>
   );
 }
