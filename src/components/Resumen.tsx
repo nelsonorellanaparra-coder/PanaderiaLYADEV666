@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { getLocalDateString } from '../constants';
 import { db } from '../firebase';
 import { collection, onSnapshot, query, where } from 'firebase/firestore';
 
@@ -24,7 +25,7 @@ const getWeekDates = () => {
 };
 
 export default function Resumen() {
-  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState(getLocalDateString());
   const [summary, setSummary] = useState({
     sales: 0,
     credits: 0,
@@ -128,14 +129,6 @@ export default function Resumen() {
         <SummaryBox title="Materiales" amount={summary.materials} color="bg-red-100 text-red-800" />
       </div>
 
-      <div className="bg-accent/20 p-6 rounded-2xl border border-accent/30 flex justify-between items-center">
-        <div>
-          <h3 className="font-bold text-primary">Deuda a Sra. Aurelia</h3>
-          <p className="text-sm text-primary/70">Por compra de materiales</p>
-        </div>
-        <span className="text-2xl font-black text-primary">Bs {summary.aureliaDebt}</span>
-      </div>
-
       <div className="bg-primary p-8 rounded-3xl shadow-lg text-white text-center relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-10 -mt-10 blur-2xl"></div>
         <div className="absolute bottom-0 left-0 w-24 h-24 bg-accent/20 rounded-full -ml-8 -mb-8 blur-xl"></div>
@@ -147,6 +140,25 @@ export default function Resumen() {
         <p className="text-sm text-white/60 mt-4 relative z-10">
           Ventas - (Gastos + Materiales)
         </p>
+      </div>
+
+      <div className="grid grid-cols-2 gap-4">
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-primary/10 text-center">
+          <h3 className="text-sm font-bold text-primary/60 mb-1">Lesly 60%</h3>
+          <p className="text-2xl font-black text-primary">Bs {Number.isInteger(realProfit * 0.6) ? (realProfit * 0.6) : (realProfit * 0.6).toFixed(1)}</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-primary/10 text-center">
+          <h3 className="text-sm font-bold text-primary/60 mb-1">Nelson 40%</h3>
+          <p className="text-2xl font-black text-primary">Bs {Number.isInteger(realProfit * 0.4) ? (realProfit * 0.4) : (realProfit * 0.4).toFixed(1)}</p>
+        </div>
+      </div>
+
+      <div className="bg-accent/20 p-6 rounded-2xl border border-accent/30 flex justify-between items-center">
+        <div>
+          <h3 className="font-bold text-primary">Deuda a Sra. Aurelia</h3>
+          <p className="text-sm text-primary/70">Por compra de materiales</p>
+        </div>
+        <span className="text-2xl font-black text-primary">Bs {summary.aureliaDebt}</span>
       </div>
     </div>
   );

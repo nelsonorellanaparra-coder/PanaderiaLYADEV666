@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CATEGORIES, PAYERS } from '../constants';
+import { CATEGORIES, PAYERS, getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
@@ -25,7 +25,7 @@ export default function Gastos() {
     return () => unsubscribe();
   }, []);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const todayRecords = records.filter(r => r.date === todayStr);
   const historyRecords = records.filter(r => r.date !== todayStr);
 
@@ -40,7 +40,7 @@ export default function Gastos() {
         amount: parseFloat(amount),
         category,
         payer: category === 'Material' ? payer : null,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         createdAt: Date.now()
       });
       setShowSuccess(true);

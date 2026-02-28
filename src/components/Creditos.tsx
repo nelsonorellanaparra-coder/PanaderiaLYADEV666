@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PRODUCTS } from '../constants';
+import { PRODUCTS, getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
@@ -38,7 +38,7 @@ export default function Creditos() {
         quantity,
         total,
         status: 'Pendiente',
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         createdAt: Date.now()
       });
       setShowSuccess(true);

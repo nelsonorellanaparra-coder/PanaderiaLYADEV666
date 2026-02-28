@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PRODUCTS } from '../constants';
+import { PRODUCTS, getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
@@ -26,7 +26,7 @@ export default function Ventas() {
     return () => unsubscribe();
   }, []);
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const todayStr = getLocalDateString();
   const todayRecords = records.filter(r => r.date === todayStr);
   const historyRecords = records.filter(r => r.date !== todayStr);
 
@@ -38,7 +38,7 @@ export default function Ventas() {
         product,
         quantity,
         total,
-        date: new Date().toISOString().split('T')[0],
+        date: getLocalDateString(),
         createdAt: Date.now()
       });
       setShowSuccess(true);
