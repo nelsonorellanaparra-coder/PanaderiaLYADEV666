@@ -5,6 +5,7 @@ export const PRODUCTS = [
   { name: 'Rollos Grandes', price: 35 },
   { name: 'Rollos de Queso pequeños de Bs.14', price: 14 },
   { name: 'Empanadas', price: 3 },
+  { name: 'Empanadas a Bs3.5', price: 3.5 },
 ];
 
 export const CATEGORIES = ['Gasto General', 'Material'];
