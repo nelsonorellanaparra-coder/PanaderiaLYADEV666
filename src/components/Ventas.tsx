@@ -2,9 +2,10 @@ import { useState, useEffect } from 'react';
 import { PRODUCTS, getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
-import { Trash2 } from 'lucide-react';
+import { EditDateDialog } from './EditDateDialog';
+import { Trash2, Edit2 } from 'lucide-react';
 import { db } from '../firebase';
-import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 
 export default function Ventas() {
   const [product, setProduct] = useState(PRODUCTS[0].name);
@@ -13,6 +14,7 @@ export default function Ventas() {
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [editingRecord, setEditingRecord] = useState<any | null>(null);
 
   const selectedProduct = PRODUCTS.find(p => p.name === product);
   const total = (selectedProduct?.price || 0) * quantity;
@@ -52,6 +54,13 @@ export default function Ventas() {
     if (deleteId) {
       await deleteDoc(doc(db, 'sales', deleteId));
       setDeleteId(null);
+    }
+  };
+
+  const confirmEditDate = async (newDate: string) => {
+    if (editingRecord) {
+      await updateDoc(doc(db, 'sales', editingRecord.id), { date: newDate });
+      setEditingRecord(null);
     }
   };
 
@@ -120,8 +129,11 @@ export default function Ventas() {
                 <p className="font-bold">{record.product}</p>
                 <p className="text-sm text-primary/60">{record.quantity} unidades • {record.date}</p>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-accent">Bs {record.total}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-accent mr-2">Bs {record.total}</span>
+                <button onClick={() => setEditingRecord(record)} className="text-blue-500 p-2 hover:bg-blue-50 rounded-full">
+                  <Edit2 size={18} />
+                </button>
                 <button onClick={() => setDeleteId(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
                   <Trash2 size={20} />
                 </button>
@@ -141,8 +153,11 @@ export default function Ventas() {
                 <p className="font-bold">{record.product}</p>
                 <p className="text-sm text-primary/60">{record.quantity} unidades • {record.date}</p>
               </div>
-              <div className="flex items-center gap-4">
-                <span className="font-bold text-accent">Bs {record.total}</span>
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-accent mr-2">Bs {record.total}</span>
+                <button onClick={() => setEditingRecord(record)} className="text-blue-500 p-2 hover:bg-blue-50 rounded-full">
+                  <Edit2 size={18} />
+                </button>
                 <button onClick={() => setDeleteId(record.id)} className="text-red-500 p-2 hover:bg-red-50 rounded-full">
                   <Trash2 size={20} />
                 </button>
@@ -155,6 +170,12 @@ export default function Ventas() {
 
       <SuccessDialog isOpen={showSuccess} onClose={() => setShowSuccess(false)} />
       <PinDialog isOpen={!!deleteId} onClose={() => setDeleteId(null)} onConfirm={confirmDelete} />
+      <EditDateDialog 
+        isOpen={!!editingRecord} 
+        currentDate={editingRecord?.date || ''} 
+        onClose={() => setEditingRecord(null)} 
+        onConfirm={confirmEditDate} 
+      />
     </div>
   );
 }

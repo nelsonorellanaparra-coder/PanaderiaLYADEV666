@@ -153,12 +153,24 @@ export default function Resumen() {
         </div>
       </div>
 
-      <div className="bg-accent/20 p-6 rounded-2xl border border-accent/30 flex justify-between items-center">
-        <div>
-          <h3 className="font-bold text-primary">Deuda a Sra. Aurelia</h3>
-          <p className="text-sm text-primary/70">Por compra de materiales</p>
+      <div className="space-y-2">
+        <div className="bg-accent/20 p-6 rounded-2xl border border-accent/30 flex justify-between items-center">
+          <div>
+            <h3 className="font-bold text-primary">Deuda a Sra. Aurelia</h3>
+            <p className="text-sm text-primary/70">Por compra de materiales</p>
+          </div>
+          <span className="text-2xl font-black text-primary">Bs {summary.aureliaDebt}</span>
         </div>
-        <span className="text-2xl font-black text-primary">Bs {summary.aureliaDebt}</span>
+        <div className="grid grid-cols-2 gap-2">
+          <div className="bg-accent/10 p-3 rounded-xl border border-accent/20 text-center">
+            <h4 className="text-xs font-bold text-primary/60 mb-1">Lesly 60%</h4>
+            <p className="text-lg font-black text-primary">Bs {Number.isInteger(summary.aureliaDebt * 0.6) ? (summary.aureliaDebt * 0.6) : (summary.aureliaDebt * 0.6).toFixed(1)}</p>
+          </div>
+          <div className="bg-accent/10 p-3 rounded-xl border border-accent/20 text-center">
+            <h4 className="text-xs font-bold text-primary/60 mb-1">Nelson 40%</h4>
+            <p className="text-lg font-black text-primary">Bs {Number.isInteger(summary.aureliaDebt * 0.4) ? (summary.aureliaDebt * 0.4) : (summary.aureliaDebt * 0.4).toFixed(1)}</p>
+          </div>
+        </div>
       </div>
     </div>
   );
