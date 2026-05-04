@@ -4,14 +4,15 @@
  */
 
 import React, { useState, ReactNode } from 'react';
-import { Store, CreditCard, Receipt, PieChart } from 'lucide-react';
+import { Store, CreditCard, Receipt, PieChart, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Ventas from './components/Ventas';
 import Creditos from './components/Creditos';
 import Gastos from './components/Gastos';
 import Resumen from './components/Resumen';
+import Productos from './components/Productos';
 
-const TABS = ['ventas', 'creditos', 'gastos', 'resumen'];
+const TABS = ['ventas', 'creditos', 'gastos', 'resumen', 'productos'];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('resumen');
@@ -102,6 +103,7 @@ export default function App() {
             {activeTab === 'creditos' && <Creditos />}
             {activeTab === 'gastos' && <Gastos />}
             {activeTab === 'resumen' && <Resumen />}
+            {activeTab === 'productos' && <Productos />}
           </motion.div>
         </AnimatePresence>
       </main>
@@ -130,6 +132,12 @@ export default function App() {
           label="Resumen" 
           isActive={activeTab === 'resumen'} 
           onClick={() => handleTabChange('resumen')} 
+        />
+        <TabButton 
+          icon={<Package />} 
+          label="Productos" 
+          isActive={activeTab === 'productos'} 
+          onClick={() => handleTabChange('productos')} 
         />
       </nav>
     </div>
