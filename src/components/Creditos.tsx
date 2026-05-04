@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PRODUCTS, getLocalDateString } from '../constants';
+import { getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { Trash2 } from 'lucide-react';
@@ -7,24 +7,46 @@ import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy } from 'firebase/firestore';
 
 export default function Creditos() {
+  const [products, setProducts] = useState<any[]>([]);
   const [client, setClient] = useState('');
-  const [product, setProduct] = useState(PRODUCTS[0].name);
+  const [productName, setProductName] = useState('');
+  const [customPrice, setCustomPrice] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [records, setRecords] = useState<any[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const selectedProduct = PRODUCTS.find(p => p.name === product);
-  const total = (selectedProduct?.price || 0) * quantity;
-
   useEffect(() => {
+    const pq = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const unsubProducts = onSnapshot(pq, (snapshot) => {
+      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(pData);
+      if (pData.length > 0 && !productName) {
+        setProductName(pData[0].name);
+        setCustomPrice(pData[0].price.toString());
+      }
+    });
+
     const q = query(collection(db, 'credits'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setRecords(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubProducts();
+    };
   }, []);
+
+  const handleProductChange = (name: string) => {
+    setProductName(name);
+    const p = products.find(p => p.name === name);
+    if (p) {
+      setCustomPrice(p.price.toString());
+    }
+  };
+
+  const total = (parseFloat(customPrice) || 0) * quantity;
 
   const handleSave = async () => {
     if (!client.trim()) return alert('Ingrese el nombre del cliente');
@@ -34,7 +56,8 @@ export default function Creditos() {
     try {
       await addDoc(collection(db, 'credits'), {
         client,
-        product,
+        product: productName,
+        price: parseFloat(customPrice),
         quantity,
         total,
         status: 'Pendiente',
@@ -76,14 +99,25 @@ export default function Creditos() {
           <div>
             <label className="block text-sm font-medium mb-1">Producto</label>
             <select 
-              value={product} 
-              onChange={e => setProduct(e.target.value)}
+              value={productName} 
+              onChange={e => handleProductChange(e.target.value)}
               className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
             >
-              {PRODUCTS.map(p => (
-                <option key={p.name} value={p.name}>{p.name} (Bs {p.price})</option>
+              {products.map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Precio Unitario (Bs)</label>
+            <input 
+              type="number" 
+              step="0.1"
+              value={customPrice} 
+              onChange={e => setCustomPrice(e.target.value)}
+              className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
 
           <div>

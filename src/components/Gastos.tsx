@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { CATEGORIES, PAYERS, getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Search } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 
@@ -12,12 +12,13 @@ export default function Gastos() {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [payer, setPayer] = useState(PAYERS[0]);
   const [records, setRecords] = useState<any[]>([]);
+  const [searchTerm, setSearchTerm] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   useEffect(() => {
-    const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'), limit(50));
+    const q = query(collection(db, 'expenses'), orderBy('createdAt', 'desc'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecords(docs);
@@ -26,8 +27,15 @@ export default function Gastos() {
   }, []);
 
   const todayStr = getLocalDateString();
-  const todayRecords = records.filter(r => r.date === todayStr);
-  const historyRecords = records.filter(r => r.date !== todayStr);
+  
+  const filteredRecords = records.filter(r => 
+    r.description.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    r.category.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    (r.payer && r.payer.toLowerCase().includes(searchTerm.toLowerCase()))
+  );
+
+  const todayRecords = filteredRecords.filter(r => r.date === todayStr);
+  const historyRecords = filteredRecords.filter(r => r.date !== todayStr);
 
   const handleSave = async () => {
     if (!description.trim() || !amount) return alert('Complete todos los campos');
@@ -124,6 +132,17 @@ export default function Gastos() {
             {isSubmitting ? 'Guardando...' : 'Guardar Gasto'}
           </button>
         </div>
+      </div>
+
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-primary/40" size={18} />
+        <input 
+          type="text" 
+          placeholder="Buscar en gastos..."
+          value={searchTerm}
+          onChange={e => setSearchTerm(e.target.value)}
+          className="w-full pl-10 pr-4 py-2 rounded-xl border border-primary/20 bg-white focus:outline-none focus:ring-2 focus:ring-accent text-sm"
+        />
       </div>
 
       <div>

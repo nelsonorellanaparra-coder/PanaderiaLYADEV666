@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { PRODUCTS, getLocalDateString } from '../constants';
+import { getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { EditDateDialog } from './EditDateDialog';
@@ -8,7 +8,9 @@ import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 
 export default function Ventas() {
-  const [product, setProduct] = useState(PRODUCTS[0].name);
+  const [products, setProducts] = useState<any[]>([]);
+  const [productName, setProductName] = useState('');
+  const [customPrice, setCustomPrice] = useState<string>('');
   const [quantity, setQuantity] = useState(1);
   const [records, setRecords] = useState<any[]>([]);
   const [showSuccess, setShowSuccess] = useState(false);
@@ -16,17 +18,37 @@ export default function Ventas() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [editingRecord, setEditingRecord] = useState<any | null>(null);
 
-  const selectedProduct = PRODUCTS.find(p => p.name === product);
-  const total = (selectedProduct?.price || 0) * quantity;
-
   useEffect(() => {
+    const pq = query(collection(db, 'products'), orderBy('name', 'asc'));
+    const unsubProducts = onSnapshot(pq, (snapshot) => {
+      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setProducts(pData);
+      if (pData.length > 0 && !productName) {
+        setProductName(pData[0].name);
+        setCustomPrice(pData[0].price.toString());
+      }
+    });
+
     const q = query(collection(db, 'sales'), orderBy('createdAt', 'desc'), limit(50));
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const docs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setRecords(docs);
     });
-    return () => unsubscribe();
+    return () => {
+      unsubscribe();
+      unsubProducts();
+    };
   }, []);
+
+  const handleProductChange = (name: string) => {
+    setProductName(name);
+    const p = products.find(p => p.name === name);
+    if (p) {
+      setCustomPrice(p.price.toString());
+    }
+  };
+
+  const total = (parseFloat(customPrice) || 0) * quantity;
 
   const todayStr = getLocalDateString();
   const todayRecords = records.filter(r => r.date === todayStr);
@@ -37,8 +59,9 @@ export default function Ventas() {
     setIsSubmitting(true);
     try {
       await addDoc(collection(db, 'sales'), {
-        product,
+        product: productName,
         quantity,
+        price: parseFloat(customPrice),
         total,
         date: getLocalDateString(),
         createdAt: Date.now()
@@ -73,14 +96,25 @@ export default function Ventas() {
           <div>
             <label className="block text-sm font-medium mb-1">Producto</label>
             <select 
-              value={product} 
-              onChange={e => setProduct(e.target.value)}
+              value={productName} 
+              onChange={e => handleProductChange(e.target.value)}
               className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
             >
-              {PRODUCTS.map(p => (
-                <option key={p.name} value={p.name}>{p.name} (Bs {p.price})</option>
+              {products.map(p => (
+                <option key={p.id} value={p.name}>{p.name}</option>
               ))}
             </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Precio Unitario (Bs)</label>
+            <input 
+              type="number" 
+              step="0.1"
+              value={customPrice} 
+              onChange={e => setCustomPrice(e.target.value)}
+              className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
+            />
           </div>
 
           <div>
