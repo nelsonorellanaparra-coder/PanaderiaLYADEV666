@@ -3,7 +3,7 @@ import { getLocalDateString } from '../constants';
 import { SuccessDialog } from './SuccessDialog';
 import { PinDialog } from './PinDialog';
 import { EditDateDialog } from './EditDateDialog';
-import { Trash2, Edit2, ClipboardList, ShoppingCart, Box } from 'lucide-react';
+import { Trash2, Edit2, ClipboardList, ShoppingCart, Box, ArrowRightCircle } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, limit, where, getDocs } from 'firebase/firestore';
 
@@ -58,6 +58,34 @@ export default function Ventas() {
 
   const total = (parseFloat(customPrice) || 0) * quantity;
   const todayStr = getLocalDateString();
+  const tomorrowStr = getLocalDateString(1);
+
+  const handleCarryOver = async () => {
+    if (isSubmitting) return;
+    const itemsToCarry = inventorySummary.filter(item => item.balance > 0);
+    if (itemsToCarry.length === 0) return alert('No hay saldo sobrante para traspasar.');
+
+    if (!confirm(`¿Desea traspasar el saldo de ${itemsToCarry.length} productos al día de mañana (${tomorrowStr})?`)) return;
+
+    setIsSubmitting(true);
+    try {
+      for (const item of itemsToCarry) {
+        await addDoc(collection(db, 'production'), {
+          product: item.name,
+          quantity: item.balance,
+          date: tomorrowStr,
+          createdAt: Date.now(),
+          type: 'traspaso'
+        });
+      }
+      setShowSuccess(true);
+    } catch (error) {
+      console.error(error);
+      alert('Error al traspasar inventario');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleSave = async () => {
     if (isSubmitting) return;
@@ -101,6 +129,12 @@ export default function Ventas() {
 
   // Cálculo de Inventario
   const inventorySummary = products.map(p => {
+    // Para el inventario, ahora consideramos todo lo producido hasta hoy menos lo vendido hasta hoy
+    // O mejor, según el pedido del usuario, mostramos el saldo del día actual + traspasos previos.
+    // Pero la lógica de "Traspasar a mañana" crea nuevos registros de producción para mañana.
+    // Entonces, si sumamos TODA la historia, el balance es global.
+    // Si filtramos por día, el balance es diario.
+    // El usuario quiere "pasar al día siguiente", lo cual ya logramos creando registros nuevos.
     const producedToday = productionRecords
       .filter(r => r.product === p.name && r.date === todayStr)
       .reduce((sum, r) => sum + r.quantity, 0);
@@ -136,18 +170,35 @@ export default function Ventas() {
           {mode === 'venta' ? 'Registrar Nueva Venta' : 'Registrar Producción Diaria'}
         </h2>
         
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium mb-1">Producto</label>
-            <select 
-              value={productName} 
-              onChange={e => handleProductChange(e.target.value)}
-              className="w-full p-3 rounded-xl border border-primary/20 bg-background focus:outline-none focus:ring-2 focus:ring-accent"
-            >
+            <label className="block text-sm font-medium mb-3">Seleccione Producto</label>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
               {products.map(p => (
-                <option key={p.id} value={p.name}>{p.name}</option>
+                <button
+                  key={p.id}
+                  onClick={() => handleProductChange(p.name)}
+                  className={`relative overflow-hidden rounded-2xl border-2 transition-all p-2 text-left group ${productName === p.name ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-primary/5 hover:border-primary/20'}`}
+                >
+                  <div className="aspect-square rounded-xl overflow-hidden mb-2">
+                    <img 
+                      src={p.imageUrl || 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80'} 
+                      alt={p.name} 
+                      className="w-full h-full object-cover transition-transform group-hover:scale-110" 
+                      referrerPolicy="no-referrer"
+                      onError={(e) => {
+                        const target = e.target as HTMLImageElement;
+                        if (target.src !== 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80') {
+                          target.src = 'https://images.unsplash.com/photo-1509440159596-0249088772ff?auto=format&fit=crop&w=200&q=80';
+                        }
+                      }}
+                    />
+                  </div>
+                  <p className={`font-bold text-xs leading-tight ${productName === p.name ? 'text-primary' : 'text-primary/70'}`}>{p.name}</p>
+                  {mode === 'venta' && <p className="text-[10px] font-medium text-accent">Bs {p.price}</p>}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           {mode === 'venta' && (
@@ -191,9 +242,18 @@ export default function Ventas() {
 
       {/* Resumen de Inventario Hoy */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-primary/10">
-        <div className="flex items-center gap-2 mb-4">
-          <Box className="text-primary" size={20} />
-          <h3 className="font-bold text-primary">Inventario de Hoy</h3>
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Box className="text-primary" size={20} />
+            <h3 className="font-bold text-primary">Inventario de Hoy</h3>
+          </div>
+          <button 
+            onClick={handleCarryOver}
+            disabled={isSubmitting}
+            className="flex items-center gap-1 text-[10px] font-bold bg-orange-100 text-orange-700 px-3 py-1.5 rounded-full hover:bg-orange-200 transition-colors disabled:opacity-50"
+          >
+            <ArrowRightCircle size={14} /> Traspasar a mañana
+          </button>
         </div>
         <div className="grid grid-cols-1 gap-2">
           {inventorySummary.filter(i => i.produced > 0 || i.sold > 0).map(item => (
@@ -235,6 +295,7 @@ export default function Ventas() {
                     <p className="font-bold flex items-center gap-2">
                       {record.total !== undefined ? <ShoppingCart size={14} className="text-primary" /> : <ClipboardList size={14} className="text-orange-600" />}
                       {record.product}
+                      {record.type === 'traspaso' && <span className="bg-orange-100 text-orange-700 text-[8px] px-1.5 py-0.5 rounded-full">Traspaso</span>}
                     </p>
                     <p className="text-sm text-primary/60">{record.quantity} unidades • {record.total !== undefined ? 'Venta' : 'Producción'}</p>
                   </div>
