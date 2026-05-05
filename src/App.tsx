@@ -3,9 +3,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, ReactNode } from 'react';
+import React, { useState, ReactNode, useEffect } from 'react';
 import { Store, CreditCard, Receipt, PieChart, Package } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { db } from './firebase';
+import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
+import { PRODUCTS as INITIAL_PRODUCTS } from './constants';
 import Ventas from './components/Ventas';
 import Creditos from './components/Creditos';
 import Gastos from './components/Gastos';
@@ -14,9 +17,57 @@ import Productos from './components/Productos';
 
 const TABS = ['ventas', 'creditos', 'gastos', 'resumen', 'productos'];
 
+const DIRECT_LINKS: { [key: string]: string } = {
+  'empanadaintegral': 'https://i.ibb.co/x8hyNmPy/Screenshot-1.png',
+  'empanadasabs35': 'https://i.ibb.co/Mkq6QrM3/Empanadas.png',
+  'queques': 'https://i.ibb.co/60589T4N/qq.png',
+  'rollosgrandes': 'https://i.ibb.co/nMgnXyTN/Rollos-de-queso-AI.png',
+  'rollospequenos': 'https://i.ibb.co/DPLzNnhm/1234124.png',
+};
+
 export default function App() {
   const [activeTab, setActiveTab] = useState('resumen');
   const [direction, setDirection] = useState(0);
+
+  useEffect(() => {
+    const runMigration = async () => {
+      try {
+        const snap = await getDocs(collection(db, 'products'));
+        const normalize = (s: string) => s.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+        const batch: Promise<any>[] = [];
+
+        if (snap.empty) {
+          for (const p of INITIAL_PRODUCTS) {
+            const normName = normalize(p.name);
+            batch.push(addDoc(collection(db, 'products'), {
+              ...p,
+              imageUrl: DIRECT_LINKS[normName] || p.imageUrl
+            }));
+          }
+        } else {
+          for (const docSnap of snap.docs) {
+            const data = docSnap.data();
+            const name = data.name || '';
+            const currentUrl = data.imageUrl || '';
+            const normName = normalize(name);
+            const correctUrl = DIRECT_LINKS[normName];
+
+            if (correctUrl && (currentUrl !== correctUrl || currentUrl.includes('unsplash.com'))) {
+              batch.push(updateDoc(doc(db, 'products', docSnap.id), {
+                imageUrl: correctUrl
+              }));
+            }
+          }
+        }
+        if (batch.length > 0) {
+          await Promise.all(batch);
+        }
+      } catch (err) {
+        console.error('Migration error:', err);
+      }
+    };
+    runMigration();
+  }, []);
   const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
   const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
 
