@@ -6,6 +6,7 @@ import { EditDateDialog } from './EditDateDialog';
 import { Trash2, Edit2, ClipboardList, ShoppingCart, Box, ArrowRightCircle } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, updateDoc, doc, onSnapshot, query, orderBy, limit, where, getDocs } from 'firebase/firestore';
+import { VoiceInput } from './VoiceInput';
 
 export default function Ventas() {
   const [products, setProducts] = useState<any[]>([]);
@@ -23,7 +24,7 @@ export default function Ventas() {
   useEffect(() => {
     const pq = query(collection(db, 'products'), orderBy('name', 'asc'));
     const unsubProducts = onSnapshot(pq, (snapshot) => {
-      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       setProducts(pData);
       if (pData.length > 0 && !productName) {
         setProductName(pData[0].name);
@@ -112,6 +113,43 @@ export default function Ventas() {
     }
   };
 
+  const handleSaveVoiceEntries = async (entries: any[]) => {
+    const savedDocs: any[] = [];
+    const today = getLocalDateString();
+    for (const tx of entries) {
+      const collectionName = tx.type === 'venta' ? 'sales' : 'production';
+      
+      // Attempt to fuzzy match against current products or fallback
+      let matchedPrice = tx.price;
+      if (tx.type === 'venta' && !matchedPrice) {
+        const found = products.find(p => p.name.toLowerCase() === tx.product.toLowerCase());
+        matchedPrice = found ? found.price : 0;
+      }
+
+      const data: any = {
+        product: tx.product,
+        quantity: tx.quantity,
+        date: today,
+        createdAt: Date.now()
+      };
+
+      if (tx.type === 'venta') {
+        data.price = matchedPrice || 0;
+        data.total = (matchedPrice || 0) * tx.quantity;
+      }
+
+      const docRef = await addDoc(collection(db, collectionName), data);
+      savedDocs.push({ id: docRef.id, collection: collectionName, ...data });
+    }
+    return savedDocs;
+  };
+
+  const handleDeleteVoiceEntries = async (entries: any[]) => {
+    for (const entry of entries) {
+      await deleteDoc(doc(db, entry.collection, entry.id));
+    }
+  };
+
   const confirmAction = async () => {
     if (deleteId) {
       await deleteDoc(doc(db, deleteId.coll, deleteId.id));
@@ -166,9 +204,18 @@ export default function Ventas() {
 
       {/* Formulario Dinámico */}
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-primary/10">
-        <h2 className="text-lg font-bold mb-4 text-primary">
-          {mode === 'venta' ? 'Registrar Nueva Venta' : 'Registrar Producción Diaria'}
-        </h2>
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <h2 className="text-lg font-bold text-primary">
+            {mode === 'venta' ? 'Registrar Nueva Venta' : 'Registrar Producción Diaria'}
+          </h2>
+          <VoiceInput
+            mode="ventas"
+            productsContext={products}
+            onSaveEntries={handleSaveVoiceEntries}
+            onDeleteEntries={handleDeleteVoiceEntries}
+            onSuccess={() => {}}
+          />
+        </div>
         
         <div className="space-y-6">
           <div>

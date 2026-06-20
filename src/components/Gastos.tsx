@@ -5,6 +5,7 @@ import { PinDialog } from './PinDialog';
 import { Trash2, Search } from 'lucide-react';
 import { db } from '../firebase';
 import { collection, addDoc, deleteDoc, doc, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
+import { VoiceInput } from './VoiceInput';
 
 export default function Gastos() {
   const [description, setDescription] = useState('');
@@ -59,6 +60,31 @@ export default function Gastos() {
     }
   };
 
+  const handleSaveVoiceEntries = async (entries: any[]) => {
+    const savedDocs: any[] = [];
+    const today = getLocalDateString();
+    for (const exp of entries) {
+      const data = {
+        description: exp.description,
+        amount: exp.amount,
+        category: exp.category,
+        payer: exp.category === 'Material' ? exp.payer : null,
+        date: today,
+        createdAt: Date.now()
+      };
+      
+      const docRef = await addDoc(collection(db, 'expenses'), data);
+      savedDocs.push({ id: docRef.id, ...data });
+    }
+    return savedDocs;
+  };
+
+  const handleDeleteVoiceEntries = async (entries: any[]) => {
+    for (const entry of entries) {
+      await deleteDoc(doc(db, 'expenses', entry.id));
+    }
+  };
+
   const confirmDelete = async () => {
     if (deleteId) {
       await deleteDoc(doc(db, 'expenses', deleteId));
@@ -69,7 +95,17 @@ export default function Gastos() {
   return (
     <div className="space-y-6">
       <div className="bg-white p-6 rounded-2xl shadow-sm border border-primary/10">
-        <h2 className="text-lg font-bold mb-4 text-primary">Nuevo Gasto</h2>
+        <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
+          <h2 className="text-lg font-bold text-primary">Nuevo Gasto</h2>
+          <VoiceInput
+            mode="gastos"
+            categoriesContext={CATEGORIES}
+            payersContext={PAYERS}
+            onSaveEntries={handleSaveVoiceEntries}
+            onDeleteEntries={handleDeleteVoiceEntries}
+            onSuccess={() => {}}
+          />
+        </div>
         
         <div className="space-y-4">
           <div>

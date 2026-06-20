@@ -20,7 +20,7 @@ export default function Creditos() {
   useEffect(() => {
     const pq = query(collection(db, 'products'), orderBy('name', 'asc'));
     const unsubProducts = onSnapshot(pq, (snapshot) => {
-      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      const pData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as any));
       setProducts(pData);
       if (pData.length > 0 && !productName) {
         setProductName(pData[0].name);
