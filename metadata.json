@@ -1,5 +1,10 @@
 {
   "name": "Panadería LyA",
   "description": "Aplicación para gestionar ventas, créditos, gastos y resumen financiero de la panadería.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }
