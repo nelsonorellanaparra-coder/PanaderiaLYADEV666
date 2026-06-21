@@ -2,6 +2,73 @@ import { useState, useEffect, useRef } from 'react';
 import { Mic, MicOff, Sparkles, Loader2, X, AlertCircle, Check, Trash2, Undo2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
+// Removes overlapping word duplication when SpeechRecognition is restarted on pauses
+function stripOverlap(a: string, b: string): string {
+  a = (a || '').trim();
+  b = (b || '').trim();
+  if (!a) return b;
+  if (!b) return a;
+  
+  const wordsA = a.split(/\s+/);
+  const wordsB = b.split(/\s+/);
+  
+  let maxOverlapLength = 0;
+  const limit = Math.min(wordsA.length, wordsB.length);
+  
+  for (let len = 1; len <= limit; len++) {
+    const suffixA = wordsA.slice(wordsA.length - len).join(' ').toLowerCase();
+    const prefixB = wordsB.slice(0, len).join(' ').toLowerCase();
+    
+    // Normalize punctuation for comparison
+    const cleanSuffix = suffixA.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    const cleanPrefix = prefixB.replace(/[.,\/#!$%\^&\*;:{}=\-_`~()]/g, "").trim();
+    
+    if (cleanSuffix === cleanPrefix) {
+      maxOverlapLength = len;
+    }
+  }
+  
+  if (maxOverlapLength > 0) {
+    const remainingB = wordsB.slice(maxOverlapLength).join(' ');
+    return remainingB ? (a + ' ' + remainingB) : a;
+  }
+  
+  return a + ' ' + b;
+}
+
+// Deeply collapses and removes consecutive duplicated words or multi-word phrases to prevent speech engine loops
+function cleanDuplicatedPhrases(text: string): string {
+  if (!text) return '';
+  
+  let words = text.trim().split(/\s+/);
+  if (words.length <= 1) return text;
+
+  let i = 0;
+  while (i < words.length) {
+    let duplicatedFound = false;
+    const maxLen = Math.floor((words.length - i) / 2);
+    // Limit to safe window size of 10 words to prevent slow-down, but catches long dictation loops
+    for (let len = Math.min(10, maxLen); len >= 1; len--) {
+      const slice1 = words.slice(i, i + len);
+      const slice2 = words.slice(i + len, i + 2 * len);
+      
+      const str1 = slice1.join(' ').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_\`~()]/g, "").trim();
+      const str2 = slice2.join(' ').toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_\`~()]/g, "").trim();
+      
+      if (str1 && str1 === str2) {
+        words.splice(i + len, len);
+        duplicatedFound = true;
+        break; // break length loop to check again from index i with updated words list
+      }
+    }
+    if (!duplicatedFound) {
+      i++;
+    }
+  }
+  
+  return words.join(' ');
+}
+
 interface VoiceInputProps {
   mode: 'ventas' | 'gastos';
   productsContext?: any[]; // Only for ventas
@@ -34,6 +101,8 @@ export function VoiceInput({
 
   const recognitionRef = useRef<any>(null);
   const shouldListenRef = useRef(false);
+  const accumulatedTranscriptRef = useRef('');
+  const currentSessionFinalRef = useRef('');
   const pulseTimerRef = useRef<any>(null);
 
   useEffect(() => {
@@ -50,19 +119,24 @@ export function VoiceInput({
       };
 
       rec.onresult = (event: any) => {
-        let interim = '';
-        let final = '';
-        for (let i = event.resultIndex; i < event.results.length; ++i) {
+        let finalSessionText = '';
+        let interimSessionText = '';
+        for (let i = 0; i < event.results.length; ++i) {
+          const segment = event.results[i][0].transcript;
           if (event.results[i].isFinal) {
-            final += event.results[i][0].transcript;
+            finalSessionText += (finalSessionText ? ' ' : '') + segment;
           } else {
-            interim += event.results[i][0].transcript;
+            interimSessionText += (interimSessionText ? ' ' : '') + segment;
           }
         }
-        if (final) {
-          setTranscript(prev => prev + ' ' + final);
-        }
-        setInterimTranscript(interim);
+        
+        currentSessionFinalRef.current = finalSessionText;
+        
+        const accum = accumulatedTranscriptRef.current;
+        const rawText = stripOverlap(accum, finalSessionText);
+        const fullText = cleanDuplicatedPhrases(rawText);
+        setTranscript(fullText);
+        setInterimTranscript(interimSessionText);
       };
 
       rec.onerror = (event: any) => {
@@ -81,6 +155,13 @@ export function VoiceInput({
       rec.onend = () => {
         // If the user intends to still be recording, auto-restart the speech API
         if (shouldListenRef.current) {
+          // Commit current session's final results so we don't lose them on restart
+          const accum = accumulatedTranscriptRef.current;
+          const sessionFinal = currentSessionFinalRef.current;
+          const combined = stripOverlap(accum, sessionFinal);
+          accumulatedTranscriptRef.current = cleanDuplicatedPhrases(combined);
+          currentSessionFinalRef.current = '';
+          
           try {
             rec.start();
           } catch (e) {
@@ -109,6 +190,8 @@ export function VoiceInput({
       setError('El dictado de voz no está soportado en este navegador. Revisa el soporte para Web Speech API.');
       return;
     }
+    accumulatedTranscriptRef.current = '';
+    currentSessionFinalRef.current = '';
     setTranscript('');
     setInterimTranscript('');
     setProcessedEntries([]);
@@ -152,7 +235,7 @@ export function VoiceInput({
   };
 
   const handleProcessText = async (textToProcess: string) => {
-    const finalCleanText = textToProcess.trim();
+    const finalCleanText = cleanDuplicatedPhrases(textToProcess).trim();
     if (!finalCleanText) {
       setError('Por favor diga o escriba algo para procesar.');
       return;
@@ -174,12 +257,40 @@ export function VoiceInput({
         body: JSON.stringify(bodyPayload)
       });
 
+      let errorText = '';
+      const contentType = res.headers.get('content-type') || '';
+      const isJson = contentType.includes('application/json');
+
       if (!res.ok) {
-        const errorData = await res.json();
-        throw new Error(errorData.error || 'Error al procesar dictado.');
+        if (isJson) {
+          try {
+            const errorData = await res.json();
+            errorText = errorData.error || `Error ${res.status}: Falló el procesamiento de IA.`;
+          } catch (e) {
+            errorText = `Error ${res.status}: Servidor inestable (intente de nuevo).`;
+          }
+        } else {
+          // If the page returned is HTML (e.g., Vercel / Cloud Run custom error page or 404/503)
+          const rawText = await res.text();
+          if (res.status === 404) {
+            errorText = `Error 404: Ruta de API no encontrada. Asegúrate de que el servidor Backend esté encendido.`;
+          } else if (res.status === 502 || res.status === 503 || res.status === 504) {
+            errorText = `Error de Red (${res.status}): El servidor de IA de Google o el servidor Backend está temporalmente inaccesible. Por favor vuelva a intentarlo en un momento.`;
+          } else {
+            errorText = `Error del servidor (${res.status}): Formato de respuesta no soportado.`;
+          }
+        }
+        throw new Error(errorText);
       }
 
-      const aiResponse = await res.json();
+      let aiResponse: any;
+      if (isJson) {
+        aiResponse = await res.json();
+      } else {
+        const rawText = await res.text();
+        throw new Error(`Error: El servidor no devolvió un archivo JSON válido. ${rawText.substring(0, 100)}`);
+      }
+
       const extractedItems = mode === 'ventas' ? aiResponse.transactions : aiResponse.expenses;
       
       if (!extractedItems || extractedItems.length === 0) {
