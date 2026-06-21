@@ -6,6 +6,34 @@ import dotenv from "dotenv";
 
 dotenv.config();
 
+// Helper to retry Gemini content generation on transient failures (like 503 Service Unavailable or 429 Rate Limits)
+// Implements an automatic model fallback list to route around overloaded model endpoints seamlessly.
+async function generateWithRetry(ai: GoogleGenAI, options: any) {
+  const modelsToTry = [
+    options.model || "gemini-3.5-flash",
+    "gemini-flash-latest",
+    "gemini-3.1-flash-lite"
+  ];
+  
+  // Deduplicate preserving order
+  const uniqueModels = Array.from(new Set(modelsToTry));
+  let lastError: any = null;
+
+  for (const model of uniqueModels) {
+    try {
+      console.log(`[Gemini API] intentando generación con modelo: "${model}"`);
+      const currentOptions = { ...options, model };
+      return await ai.models.generateContent(currentOptions);
+    } catch (err: any) {
+      lastError = err;
+      const errMsg = String(err?.message || err);
+      console.warn(`[Gemini API] El modelo "${model}" falló. Detalle: ${errMsg}. Cambiando inmediatamente al siguiente modelo alternativo...`);
+    }
+  }
+  
+  throw lastError || new Error("Todos los modelos de Gemini disponibles fallaron.");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -59,8 +87,8 @@ Para cada transacción extraída:
 - Determina la cantidad (número entero).
 - Para ventas ("venta"), determina el precio unitario en Bs. Si el usuario especifica un precio (ej. "a 4 bolivianos" o "a Bs 4" o "cada una a 4Bs"), usa ese precio. Si no menciona ningún precio específico, usa el precio normal del producto del listado.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+      const response = await generateWithRetry(ai, {
+        model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
           systemInstruction: "Eres un asistente de panadería inteligente experto en procesar texto de voz a registros estructurados.",
@@ -137,8 +165,8 @@ Reglas importantes de procesamiento de gastos:
    - "Gasto General" para cualquier otro gasto general (servicios, pasajes, pasajes en minibús, luz, detergentes, etc.).
 4. Si la categoría es "Material", identifica el pagador si se menciona (uno de [${payersStr}]). Si se nombra a Aurelia o Sra Aurelia, usa "Sra. Aurelia". Si se nombra a Lesly, usa "Lesly". Si no se menciona ningún pagador, o si la categoría no es "Material", colócalo como null.`;
 
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
+      const response = await generateWithRetry(ai, {
+        model: "gemini-3.1-flash-lite",
         contents: prompt,
         config: {
           systemInstruction: "Eres un asistente de panadería inteligente experto en procesar gastos con perfecta ortografía y estructura.",
