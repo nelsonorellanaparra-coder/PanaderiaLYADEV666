@@ -1,6 +1,5 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
@@ -199,6 +198,111 @@ Reglas importantes de procesamiento de gastos:
   }
 });
 
+// API Route for parsing unified voice/text content (can contain sales, productions, and expenses)
+app.post("/api/ai/parse-asistente", async (req, res) => {
+  try {
+    const { text, products, categories, payers } = req.body;
+    if (!text) {
+      return res.status(400).json({ error: "El texto es requerido" });
+    }
+
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      return res.status(500).json({ 
+        error: "API Key de Gemini no configurada. Por favor, agregue GEMINI_API_KEY en Panel lateral > Settings > Secrets." 
+      });
+    }
+
+    const ai = new GoogleGenAI({
+      apiKey,
+      httpOptions: {
+        headers: {
+          'User-Agent': 'aistudio-build',
+        }
+      }
+    });
+
+    const productsContext = products && products.length > 0 
+      ? `Productos de la panadería disponibles:\n${products.map((p: any) => `- Name: "${p.name}", Normal price: ${p.price}`).join('\n')}`
+      : 'Productos de la panadería sugeridos:\n- "Empanada Integral"\n- "Empanadas a Bs.3.5"\n- "Queques"\n- "Rollos grandes"\n- "Rollos pequeños"';
+
+    const categoriesStr = categories ? categories.join(', ') : 'Gasto General, Material';
+    const payersStr = payers ? payers.join(', ') : 'Sra. Aurelia, Lesly';
+
+    const prompt = `Analiza la transcripción de voz o texto escrito de un panadero y extrae todas las operaciones mencionadas: estas pueden ser ventas (venta), producción de pan (produccion), o gastos (gasto). Las tres operaciones pueden estar mezcladas en un solo texto. Extrae cada una de ellas de forma estructurada como una lista de registros bajo la propiedad "records".
+
+Texto: "${text}"
+
+${productsContext}
+
+Categorías de gastos disponibles: [${categoriesStr}]
+Pagadores de material de gastos disponibles: [${payersStr}]
+
+Instrucciones de clasificación y extracción:
+Cada registro de la lista "records" debe tener un campo "operationType" que indique qué tipo de registro es: "venta", "produccion", o "gasto", y sus propiedades correspondientes.
+
+1. Si es "venta" o "produccion":
+   - Debe tener:
+     * "operationType": ya sea "venta" (mencionado como vendido, vendí) o "produccion" (mencionado como producido, elaboramos, horneamos, hicimos).
+     * "product": Nombre exacto del producto mapeado de la lista disponible (ej: "Queques", "Rollos grandes", "Rollos pequeños", "Empanada Integral", "Empanadas a Bs.3.5") o si no coincide, el nombre ortográficamente correcto del producto sugerido.
+     * "quantity": Cantidad de ítems (entero).
+     * "price": (Solo para "venta") El precio unitario en Bs. si se menciona (ej: "a 4 bolivianos" o "cada uno a 3.5"). Si no se menciona precio, pon el precio normal del listado de productos, o null para que use el predeterminado.
+   - NO debe contener campos de "gasto".
+
+2. Si es "gasto" (mencionado como gasté, compré, pagué, etc. Ej: "compré huevos por 40 pesos"):
+   - Debe tener:
+     * "operationType": "gasto".
+     * "description": Una descripción clara y corregida ortográficamente del gasto en español (ej: "Compra de huevos", "Harina de trigo", "Pasajes de minibús").
+     * "amount": Monto total en bolivianos (Bs) (número).
+     * "category": Categoría correspondiente:
+       - "Material" si se trata de ingredientes para hornear (como harina, huevos, queso, polvo de hornear, levadura, etc.).
+       - "Gasto General" para cualquier otro gasto general (servicios, pasajes, bolsas, detergente, luz, etc.).
+     * "payer": Nombre de la persona que pagó (si la categoría es "Material"). Si dice "Aurelia" o "Sra Aurelia", usa "Sra. Aurelia". Si dice "Lesly", usa "Lesly". Si no se menciona ningún pagador o si no es de categoría "Material", colócalo como null.
+   - NO debe contener los campos de "venta" o "produccion" (como "product", "price").`;
+
+    const response = await generateWithRetry(ai, {
+      model: "gemini-3.1-flash-lite",
+      contents: prompt,
+      config: {
+        systemInstruction: "Eres un asistente de panadería inteligente experto en identificar, clasificar y extraer ventas, producciones y gastos de un dictado o texto escrito con impecable ortografía.",
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            records: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  operationType: { type: Type.STRING, description: "Type of operation: 'venta', 'produccion', or 'gasto'" },
+                  // Fields for 'venta' or 'produccion'
+                  product: { type: Type.STRING, description: "If 'venta' or 'produccion', the exact matched name of the product" },
+                  quantity: { type: Type.INTEGER, description: "If 'venta' or 'produccion', the integer quantity" },
+                  price: { type: Type.NUMBER, description: "If 'venta', the unit price (can be null/omitted to default to template price)" },
+                  // Fields for 'gasto'
+                  description: { type: Type.STRING, description: "If 'gasto', a clean descriptive name of the expense in Spanish" },
+                  amount: { type: Type.NUMBER, description: "If 'gasto', the expense amount in Bolivianos (Bs)" },
+                  category: { type: Type.STRING, description: "If 'gasto', must be 'Material' or 'Gasto General'" },
+                  payer: { type: Type.STRING, description: "If 'gasto' and Category is 'Material', the person paying ('Sra. Aurelia' or 'Lesly', otherwise null)" }
+                },
+                required: ["operationType"]
+              }
+            }
+          },
+          required: ["records"]
+        }
+      }
+    });
+
+    const dataStr = response.text?.trim() || '{"records":[]}';
+    const parsed = JSON.parse(dataStr);
+    res.json(parsed);
+  } catch (err: any) {
+    console.error("Error processing general assistant audio/text:", err);
+    res.status(500).json({ error: "Error de procesamiento de IA: " + err.message });
+  }
+});
+
 export async function configureViteMiddleware(appInstance: express.Express) {
   if (process.env.VERCEL) {
     // Escapar configuración de Vite en Vercel para que compile y funcione como Serverless de forma óptima.
@@ -206,6 +310,7 @@ export async function configureViteMiddleware(appInstance: express.Express) {
   }
   
   if (process.env.NODE_ENV !== "production") {
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

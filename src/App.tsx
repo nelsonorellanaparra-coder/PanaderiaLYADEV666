@@ -4,7 +4,7 @@
  */
 
 import React, { useState, ReactNode, useEffect } from 'react';
-import { Store, CreditCard, Receipt, PieChart, Package } from 'lucide-react';
+import { Store, CreditCard, Receipt, PieChart, Package, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { db } from './firebase';
 import { collection, getDocs, updateDoc, doc, addDoc } from 'firebase/firestore';
@@ -14,8 +14,9 @@ import Creditos from './components/Creditos';
 import Gastos from './components/Gastos';
 import Resumen from './components/Resumen';
 import Productos from './components/Productos';
+import AsistenteIA from './components/AsistenteIA';
 
-const TABS = ['ventas', 'creditos', 'gastos', 'resumen', 'productos'];
+const TABS = ['ventas', 'creditos', 'gastos', 'resumen', 'asistente', 'productos'];
 
 const DIRECT_LINKS: { [key: string]: string } = {
   'empanadaintegral': 'https://i.ibb.co/x8hyNmPy/Screenshot-1.png',
@@ -154,6 +155,7 @@ export default function App() {
             {activeTab === 'creditos' && <Creditos />}
             {activeTab === 'gastos' && <Gastos />}
             {activeTab === 'resumen' && <Resumen />}
+            {activeTab === 'asistente' && <AsistenteIA />}
             {activeTab === 'productos' && <Productos />}
           </motion.div>
         </AnimatePresence>
@@ -183,6 +185,12 @@ export default function App() {
           label="Resumen" 
           isActive={activeTab === 'resumen'} 
           onClick={() => handleTabChange('resumen')} 
+        />
+        <TabButton 
+          icon={<Sparkles />} 
+          label="Asistente" 
+          isActive={activeTab === 'asistente'} 
+          onClick={() => handleTabChange('asistente')} 
         />
         <TabButton 
           icon={<Package />} 
