@@ -47,8 +47,8 @@ function cleanDuplicatedPhrases(text: string): string {
   while (i < words.length) {
     let duplicatedFound = false;
     const maxLen = Math.floor((words.length - i) / 2);
-    // Limit to safe window size of 10 words to prevent slow-down, but catches long dictation loops
-    for (let len = Math.min(10, maxLen); len >= 1; len--) {
+    // Increased scanning threshold from 10 to 100 to detect and eliminate long duplicate segments
+    for (let len = Math.min(100, maxLen); len >= 1; len--) {
       const slice1 = words.slice(i, i + len);
       const slice2 = words.slice(i + len, i + 2 * len);
       
@@ -67,6 +67,44 @@ function cleanDuplicatedPhrases(text: string): string {
   }
   
   return words.join(' ');
+}
+
+// Drops direct replicate sentences that differ only by whitespace, casing or punctuation
+function cleanSentenceDuplications(text: string): string {
+  if (!text) return '';
+  const sentences = text.split(/([.!?\n]+)/);
+  const cleanSentences: string[] = [];
+  const seenSentences = new Set<string>();
+
+  for (let i = 0; i < sentences.length; i += 2) {
+    const rawSentence = sentences[i];
+    const punctuation = sentences[i + 1] || '';
+    const clean = rawSentence.trim().toLowerCase().replace(/[.,\/#!$%\^&\*;:{}=\-_\`~()]/g, "").trim();
+    if (!clean) continue;
+    
+    let isDuplicated = seenSentences.has(clean);
+    if (!isDuplicated) {
+      // Check if this sentence is fully covered in a larger sentence already seen
+      for (const seen of seenSentences) {
+        if (seen.includes(clean) && clean.length > 10) {
+          isDuplicated = true;
+          break;
+        }
+      }
+    }
+
+    if (!isDuplicated) {
+      seenSentences.add(clean);
+      cleanSentences.push(rawSentence.trim() + punctuation);
+    }
+  }
+  return cleanSentences.join(' ');
+}
+
+// Orchestrator that cleans both phrase-level and sentence-level repetitions
+function cleanFullText(text: string): string {
+  if (!text) return '';
+  return cleanSentenceDuplications(cleanDuplicatedPhrases(text));
 }
 
 interface VoiceInputProps {
@@ -134,7 +172,7 @@ export function VoiceInput({
         
         const accum = accumulatedTranscriptRef.current;
         const rawText = stripOverlap(accum, finalSessionText);
-        const fullText = cleanDuplicatedPhrases(rawText);
+        const fullText = cleanFullText(rawText);
         setTranscript(fullText);
         setInterimTranscript(interimSessionText);
       };
@@ -159,7 +197,7 @@ export function VoiceInput({
           const accum = accumulatedTranscriptRef.current;
           const sessionFinal = currentSessionFinalRef.current;
           const combined = stripOverlap(accum, sessionFinal);
-          accumulatedTranscriptRef.current = cleanDuplicatedPhrases(combined);
+          accumulatedTranscriptRef.current = cleanFullText(combined);
           currentSessionFinalRef.current = '';
           
           try {
@@ -235,7 +273,7 @@ export function VoiceInput({
   };
 
   const handleProcessText = async (textToProcess: string) => {
-    const finalCleanText = cleanDuplicatedPhrases(textToProcess).trim();
+    const finalCleanText = cleanFullText(textToProcess).trim();
     if (!finalCleanText) {
       setError('Por favor diga o escriba algo para procesar.');
       return;
